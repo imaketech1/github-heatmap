@@ -1,6 +1,19 @@
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
-const USERNAME = process.env.GITHUB_USERNAME || process.env.GITHUB_REPOSITORY_OWNER || 'imaketech1';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+let config = { username: 'imaketech1' };
+try {
+    const configPath = resolve(__dirname, '../config.json');
+    const configContent = await readFile(configPath, 'utf8');
+    config = JSON.parse(configContent);
+} catch {
+    // fallback to default
+}
+
+const USERNAME = config.username || 'imaketech1';
 const OUTPUT_PATH = process.env.OUTPUT_PATH || 'heatmap.svg';
 
 const CELL = 12;
@@ -22,16 +35,13 @@ const FUTURE_GIF = 'e109.gif';
 async function fetchContributions(username) {
     const apis = [
         async () => {
-            console.log(`📡 Trying GitHub Contributions API for ${username}...`);
             const res = await fetch(`https://github-contributions-api.jogruber.de/v4/${encodeURIComponent(username)}?y=last`);
             if (!res.ok) throw new Error(`API error ${res.status}`);
             const data = await res.json();
             if (!data.contributions || data.contributions.length === 0) throw new Error('No contributions data');
-            console.log(`✅ Got ${data.contributions.length} days of data from GitHub API`);
             return data.contributions;
         },
         async () => {
-            console.log(`📡 Trying GitHub public activity for ${username}...`);
             const res = await fetch(`https://api.github.com/users/${username}/events/public?per_page=100`);
             if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
             const events = await res.json();
@@ -45,11 +55,9 @@ async function fetchContributions(username) {
             }
             const contributions = Object.entries(commitCounts).map(([date, count]) => ({ date, count }));
             if (contributions.length === 0) throw new Error('No commit events found');
-            console.log(`✅ Got ${contributions.length} days of data from GitHub events`);
             return contributions;
         },
         async () => {
-            console.log(`🎮 Using seeded demo data for ${username}...`);
             return generateSeededDemoData(username);
         }
     ];
@@ -60,19 +68,15 @@ async function fetchContributions(username) {
             if (result && result.length > 0) {
                 const totalCommits = result.reduce((sum, c) => sum + c.count, 0);
                 if (totalCommits > 0) {
-                    console.log(`Total commits: ${totalCommits}`);
                     return result;
                 }
-                console.log(`No commits found in data (${result.length} days, 0 commits)`);
                 continue;
             }
-        } catch (err) {
-            console.log(`Failed: ${err.message}`);
+        } catch {
             continue;
         }
     }
 
-    console.log(`All APIs failed, using demo data for ${username}`);
     return generateDemoData();
 }
 
@@ -436,12 +440,12 @@ function simulateGame(grid) {
                 const spawnRow = Math.max(0, Math.min(cell.row + (Math.random() > 0.5 ? 1 : -1), ROWS - 1));
                 const spawnCell = grid[spawnRow]?.[spawnCol];
                 if (spawnCell && !spawnCell.isWall) {
-                    const newAttacker = spawnAttacker(spawnCol, spawnRow);
+                    spawnAttacker(spawnCol, spawnRow);
                 } else {
                     const fallbackRow = Math.floor(Math.random() * ROWS);
                     const fallbackCell = grid[fallbackRow]?.[0];
                     if (fallbackCell && !fallbackCell.isWall) {
-                        const newAttacker = spawnAttacker(0, fallbackRow);
+                        spawnAttacker(0, fallbackRow);
                     }
                 }
             }
@@ -566,7 +570,6 @@ function simulateGame(grid) {
                 });
             }
 
-            // Check if reached the target (before future area)
             if (attacker.col >= HEATMAP_COLS - 1) {
                 gameOver = true;
                 return;
@@ -608,7 +611,6 @@ function simulateGame(grid) {
     };
 }
 
-
 function buildAnimationPath(pathHistory) {
     const targetRow = Math.floor(ROWS / 2);
     const startCol = 0;
@@ -616,27 +618,23 @@ function buildAnimationPath(pathHistory) {
 
     if (pathHistory.length === 0) {
         const points = [];
-
         for (let col = startCol; col <= endCol; col++) {
             points.push({
                 x: OFFSET_X + col * CELL + CELL / 2,
                 y: OFFSET_Y + targetRow * CELL + CELL / 2
             });
         }
-
         for (let col = endCol - 1; col >= startCol; col--) {
             points.push({
                 x: OFFSET_X + col * CELL + CELL / 2,
                 y: OFFSET_Y + targetRow * CELL + CELL / 2
             });
         }
-
         return points;
     }
 
     const points = [];
     const sampleRate = Math.max(1, Math.floor(pathHistory.length / 200));
-
 
     for (let i = 0; i < pathHistory.length; i += sampleRate) {
         const step = pathHistory[i];
@@ -665,7 +663,6 @@ function buildAnimationPath(pathHistory) {
         y: OFFSET_Y + targetRow * CELL + CELL / 2
     });
 
-    console.log(`Created loop path: ${points.length} points (past → edge of future → past)`);
     return points;
 }
 
@@ -709,8 +706,6 @@ function buildSvg(grid, simulation) {
     pathD += ' Z';
 
     const durationSec = Math.max(15, Math.round(pathPoints.length * 0.1));
-    console.log(` Animation duration: ${durationSec}s for ${pathPoints.length} points`);
-    console.log(`Path: Past (col 0) → Edge of Future (col ${HEATMAP_COLS - 1}) → Past (col 0)`);
 
     const futureCol = HEATMAP_COLS + Math.floor(BUFFER_COLS / 2);
     const futureRow = Math.floor(ROWS / 2);
@@ -725,10 +720,8 @@ function buildSvg(grid, simulation) {
   <rect width="${WIDTH}" height="${HEIGHT}" fill="#0d1117"/>
   ${rects.join('\n  ')}
   
-  <!-- Future GIF (stays in place, never moving) -->
   <image href="${FUTURE_GIF}" x="${future.x - futureSize / 2}" y="${future.y - futureSize / 2}" width="${futureSize}" height="${futureSize}"/>
   
-  <!-- Attacker GIF - Moves from past to edge of future and back -->
   <image href="${ATTACKER_GIF}" x="${-spriteSize / 2}" y="${-spriteSize / 2}" width="${spriteSize}" height="${spriteSize}">
     <animateMotion dur="${durationSec}s" repeatCount="indefinite" path="${pathD}"/>
   </image>
@@ -736,31 +729,14 @@ function buildSvg(grid, simulation) {
 }
 
 async function main() {
-    console.log(`Generating heatmap for ${USERNAME}...`);
+    const contributions = await fetchContributions(USERNAME);
+    const grid = buildGrid(contributions);
+    const simulation = simulateGame(grid);
 
-    try {
-        const contributions = await fetchContributions(USERNAME);
-        const grid = buildGrid(contributions);
+    const svg = buildSvg(grid, simulation);
+    await writeFile(OUTPUT_PATH, svg, 'utf8');
 
-        const simulation = simulateGame(grid);
-
-        console.log(`Simulation complete:`);
-        console.log(`   - Steps: ${simulation.steps}`);
-        console.log(`   - Attackers spawned: ${simulation.totalAttackers}`);
-        console.log(`   - Walls remaining: ${simulation.wallCount}`);
-        console.log(`   - Score: ${simulation.score}`);
-        console.log(`   - Game over: ${simulation.gameOver}`);
-        console.log(`   - Path steps recorded: ${simulation.pathHistory.length}`);
-
-        const svg = buildSvg(grid, simulation);
-        await writeFile(OUTPUT_PATH, svg, 'utf8');
-
-        console.log(` Wrote ${OUTPUT_PATH}`);
-
-    } catch (err) {
-        console.error('❌ Error:', err);
-        process.exit(1);
-    }
+    console.log(`Wrote ${OUTPUT_PATH}`);
 }
 
 main();
