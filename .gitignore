@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+yarn.lock
+
+# Output files
+output/
+temp_frames/
+dist/
+*.log
+
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+frame_*.png

@@ -1,0 +1,32 @@
+{
+    "name": "github-heatmap",
+    "version": "1.0.0",
+    "description": "Animated web-dollz gracing your GitHub contribution heatmap",
+    "type": "module",
+    "main": "src/generatesvg.mjs",
+    "scripts": {
+        "generate": "node src/generatesvg.mjs",
+        "gif": "node src/generategif.mjs heatmap.svg output/heatmap.gif 1 10",
+        "build": "npm run generate && npm run gif",
+        "dev": "node src/generatesvg.mjs --dev",
+        "clean": "rm -rf output/* temp_frames/* heatmap.svg"
+    },
+    "keywords": [
+        "github",
+        "heatmap",
+        "dollz",
+        "animation",
+        "gif",
+        "pixel-art"
+    ],
+    "author": "imaketech1",
+    "license": "MIT",
+    "dependencies": {
+        "canvas": "^2.11.2",
+        "puppeteer-core": "^22.0.0",
+        "ffmpeg-static": "^5.2.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

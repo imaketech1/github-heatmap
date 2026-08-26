@@ -1,0 +1,81 @@
+name: Generate Heatmap
+
+on:
+  schedule:
+    # Run daily at midnight UTC
+    - cron: "0 0 * * *"
+  # Allow manual trigger
+  workflow_dispatch:
+  # Run on pushes to main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-heatmap
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # Install system dependencies (for canvas, puppeteer, ffmpeg)
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            ffmpeg
+
+      # Generate the SVG
+      - name: Generate SVG animation
+        run: npm run generate
+        env:
+          GITHUB_USERNAME: ${{ github.repository_owner }}
+
+      # Generate the GIF
+      - name: Generate GIF
+        run: npm run gif
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: false
+
+      # Prepare files for deployment
+      - name: Prepare files for deployment
+        run: |
+          mkdir -p dist
+          mkdir -p output 
+          cp output/heatmap.gif dist/heatmap.gif
+          cp heatmap.svg dist/heatmap.svg
+
+      # Deploy to output branch
+      - name: Deploy to output branch
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: output
+          commit_message: 'Generate heatmap animation [skip ci]'
